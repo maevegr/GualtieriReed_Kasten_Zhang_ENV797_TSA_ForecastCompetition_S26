@@ -8,23 +8,76 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+# Setup
+```{r}
+library(here)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(forecast)
+library(cowplot)
+library(smooth)
+library(writexl)
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+# Load in data set
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+load <- read_excel("load.xlsx") %>% 
+  mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  select(date,daily)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## check for missing data
+
+```{r}
+summary(load$daily) #no NA
+
+check_nobs <- length(seq.Date(
+  from = as.Date("2005-01-01"),
+  to   = as.Date("2011-06-30"),
+  by   = "day"
+))
+
+nobs <- nrow(load)
+
+nobs
+check_nobs
+#number of expected observations = number of actual observations no missing data
+```
+
+## Create time series object
+
+```{r}
+msts_load <- msts(load$daily, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
+```
+
+#Examine data
+
+```{r}
+autoplot(msts_load)
+```
+
+
+#Creating Basic Model
+
+```{r}
+#basic TS
+ts_load <- ts(load$daily, start=c(2005,1,1))
+#autoarima
+arima_attempt1 <- auto.arima(ts_load, ic=c("aic"))
+#forecast based on the auto arima model
+arima_forecast1 <- forecast(arima_attempt1, h=31)
+
+#create dataframe /prep for export 
+arima1_df <- data.frame(load = arima_forecast1$mean)
+arima1_df <- arima1_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(arima1_df)),.before = 1)
+
+#eport to as excel sheet
+write_xlsx(arima1_df, 'arima1.xlsx')
+```
