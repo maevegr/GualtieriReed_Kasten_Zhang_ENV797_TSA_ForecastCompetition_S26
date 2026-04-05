@@ -24,16 +24,19 @@ library(cowplot)
 # Load in data set
 
 ```{r}
-load <- read_excel("load.xlsx") %>% 
+load_full <- read_excel("load.xlsx") %>% 
   mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
   mutate(date = ymd(date)) %>% 
   select(date,daily)
+
+load_train <- load_full %>% 
+  filter(date < as.Date("2010-07-01"))
 ```
 
 ## check for missing data
 
 ```{r}
-summary(load$daily) #no NA
+summary(load_full$daily) #no NA
 
 check_nobs <- length(seq.Date(
   from = as.Date("2005-01-01"),
@@ -48,7 +51,11 @@ nobs <- nrow(load)
 ## Create time series object
 
 ```{r}
-ts_load <- msts(load$daily, 
+ts_load_full <- msts(load_full$daily, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
+
+ts_load_train <- msts(load_train$daily, 
                 seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
                 start=c(2005,1,1))
 ```
@@ -56,6 +63,7 @@ ts_load <- msts(load$daily,
 #Examine data
 
 ```{r}
-autoplot(ts_load)
+autoplot(ts_load_full)
+autoplot(ts_load_train)
 ```
 
