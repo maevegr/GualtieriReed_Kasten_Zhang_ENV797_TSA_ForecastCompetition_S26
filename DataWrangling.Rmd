@@ -23,6 +23,7 @@ library(cowplot)
 
 # Load in data set
 
+## load
 ```{r}
 load_full <- read_excel("load.xlsx") %>% 
   mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
@@ -31,6 +32,43 @@ load_full <- read_excel("load.xlsx") %>%
 
 load_train <- load_full %>% 
   filter(date < as.Date("2010-07-01"))
+
+```
+## temp and humidity
+
+```{r}
+#all temp
+temp <- read_excel("temperature.xlsx") %>% 
+  mutate(hourly = rowMeans(across(3:30))) %>% 
+  select(date,hr,hourly) %>% 
+  pivot_wider(names_from = hr,
+              values_from = hourly) %>% 
+  mutate(avg_temp = rowMeans(across(2:25))) %>% 
+  select(date,avg_temp)
+
+#train temp
+temp_train <- temp  %>% 
+  filter(date < as.Date("2010-07-01"))
+
+write_csv(temp, 'data/temp_processed.csv')
+write.csv(temp_train, "data/temp_train.csv")
+
+#all humidity
+humidity <- read_excel("relative_humidity.xlsx") %>% 
+  mutate(hourly = rowMeans(across(3:30))) %>% 
+  select(date,hr,hourly) %>% 
+  pivot_wider(names_from = hr,
+              values_from = hourly) %>% 
+  mutate(avg_humidity = rowMeans(across(2:25))) %>% 
+  select(date,avg_humidity)
+
+#train humidity
+humidity_train <- humidity %>% 
+  filter(date < as.Date("2010-07-01"))
+
+write_csv(humidity, 'data/humidity_processed.csv')
+write.csv(humidity_train, "data/humidity_train.csv")
+  
 ```
 
 ## check for missing data
@@ -65,5 +103,8 @@ ts_load_train <- msts(load_train$daily,
 ```{r}
 autoplot(ts_load_full)
 autoplot(ts_load_train)
+
+ts_load_full %>% mstl() %>%
+  autoplot()
 ```
 

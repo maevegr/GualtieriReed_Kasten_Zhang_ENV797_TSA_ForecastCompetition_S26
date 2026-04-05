@@ -5,26 +5,154 @@ date: "2026-03-31"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+
+```{r}
+library(here)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(forecast)
+library(cowplot)
+library(writexl)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# Load in data set
 
-```{r cars}
-summary(cars)
+```{r}
+load_full <- read_excel("load.xlsx") %>% 
+  mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  select(date,daily)
+
+load_train <- load_full %>% 
+  filter(date < as.Date("2010-07-01"))
+
+temp_full <- read.csv("data/temp_processed.csv")
+humidity_full <- read.csv("data/humidity_processed.csv")
 ```
 
-## Including Plots
+# Create time series object
 
-You can also embed plots, for example:
+```{r}
+ts_load_full <- msts(load_full$daily, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+ts_load_train <- msts(load_train$daily, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Examine data
+
+```{r}
+autoplot(ts_load_full)
+autoplot(ts_load_train)
+```
+
+# Models
+
+## ARIMA + fourier
+### Model 1: k = 2,12; no exog
+```{r}
+ARIMA_Four_train <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(2,12)),
+                             approximation = TRUE
+                             )
+
+#Forecast with ARIMA fit
+#also need to specify h for fourier terms
+ARIMA_Four_train_forecast <- forecast(ARIMA_Four_fit,
+                           xreg=fourier(ts_load_train,
+                                        K=c(2,12),
+                                        h=31),
+                           h=31
+                           ) 
+
+#Plot foresting results
+autoplot(ARIMA_Four_train_forecast) + ylab("Load")
+
+#Plot model + observed data
+autoplot(ts_load_full) +
+  autolayer(ARIMA_Four_train_forecast, series="ARIMA_FOURIER",PI=FALSE) +
+  ylab("Load")
+
+#Train and forecast with full data set
+ARIMA_Four_full <- auto.arima(ts_load_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_full, 
+                                          K=c(2,12)),
+                             approximation = TRUE
+                             )
+
+ARIMA_Four_full_forecast <- forecast(ARIMA_Four_fit,
+                           xreg=fourier(ts_load_train,
+                                        K=c(2,12),
+                                        h=31),
+                           h=31
+                           ) 
+
+ARIMA_four1<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_Four_full_forecast$mean
+)
+
+write_csv(ARIMA_four1, 'Submissions/ARIMAfour1.csv')
+```
+
+### Model 2: k = 2,12; include temp and humidity
+Chatgpt used to understand how to include temp and humidity along with fourier in xreg
+
+```{r}
+fourier_terms <- fourier(ts_load_full, K=c(2,12))
+xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
+  head(-1) %>% 
+  select(avg_temp, avg_humidity) %>% 
+  cbind(fourier_terms)
+
+write_csv(xreg_data,"data/xreg_data.csv")
+
+#might need matrix? still not working
+
+ARIMA_Four_full2 <- auto.arima(ts_load_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=xred_data
+                             )
+
+ARIMA_Four_full_forecast2 <- forecast(ARIMA_Four_full2,
+                           xreg=xreg_data,
+                           h=31
+                           ) 
+```
+
+## ETS
+```{r}
+#Fit and forecast STL + ETS model to data
+ETS_train1 <-  stlf(ts_load_train,h=31)
+
+#Plot foresting results
+autoplot(ETS_train1) + ylab("Load")
+
+#Plot model + observed data
+autoplot(ts_load_full) +
+  autolayer(ETS_train1, series="STL + ETS",PI=FALSE) +
+  ylab("Load")
+
+ETS_train_scores<- accuracy(ETS_train1$mean,ts_load_full)  
+
+ETS_fit1<- stlf(ts_load_full,h=31)
+ETS_output1<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ETS_fit1$mean
+)
+
+write_csv(ETS_output1, 'Submissions/ETS1.csv')
+```
+
