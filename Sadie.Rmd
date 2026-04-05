@@ -78,7 +78,7 @@ arima1_df <- data.frame(load = arima_forecast1$mean)
 arima1_df <- arima1_df %>% 
   add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(arima1_df)),.before = 1)
 
-#eport to as excel sheet
+#export as an excel sheet
 write_xlsx(arima1_df, 'arima1.xlsx')
 
 ```
