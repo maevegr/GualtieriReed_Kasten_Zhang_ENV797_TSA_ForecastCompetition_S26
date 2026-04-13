@@ -84,4 +84,133 @@ write_csv(TBATS_df, 'Submissions/TBATS.csv')
 ```
 
 
+#neural network, p=1 P=0, K=2,12
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+#test diff p and P values, also can add xreg with Fourier term for multiple seasonality
+
+NN_1 <- nnetar(msts_load,
+                 p=1,
+                 P=0,
+                 xreg=fourier(msts_load, K=c(2,12)))
+
+NN_1_forecast <- forecast(NN_1, 
+                   h=31,
+                   xreg=fourier(msts_load, K=c(2,12),h=31))
+
+#create dataframe /prep for export 
+NN_1_df <- data.frame(load = NN_1_forecast$mean)
+NN_1_df <- NN_1_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_1_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_1_df, 'Submissions/NN_1.csv')
+```
+
+#neural network, p=7 P=0, K=2,12
+internet suggested p=7 / a higher p would work better. maybe.
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+#test diff p and P values, also can add xreg with Fourier term for multiple seasonality
+
+NN_2 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg=fourier(msts_load, K=c(2,12)))
+
+NN_2_forecast <- forecast(NN_2, 
+                   h=31,
+                   xreg=fourier(msts_load, K=c(2,12),h=31))
+
+#create dataframe /prep for export 
+NN_2_df <- data.frame(load = NN_2_forecast$mean)
+NN_2_df <- NN_2_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_2_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_2_df, 'Submissions/NN_2.csv')
+```
+
+slightly better with higher p value. will attempt slightly different K values
+
+#neural network, p=7 P=0, K=2,6
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+#test diff p and P values, also can add xreg with Fourier term for multiple seasonality
+
+NN_3 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg=fourier(msts_load, K=c(2,6)))
+
+NN_3_forecast <- forecast(NN_3, 
+                   h=31,
+                   xreg=fourier(msts_load, K=c(2,6),h=31))
+
+#create dataframe /prep for export 
+NN_3_df <- data.frame(load = NN_3_forecast$mean)
+NN_3_df <- NN_3_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_3_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_3_df, 'Submissions/NN_3.csv')
+```
+
+
+Should add temp and humidity to improve my best model - NN_2!
+#neural network, p=7 P=0, K=2,12 + temp and humidity variables
+```{r}
+temp_df <- read_excel("temperature.xlsx") %>% 
+  mutate(hourly_temp = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  group_by(date) %>%
+  summarise(daily = mean(as.numeric(hourly_temp), na.rm = TRUE)) %>%
+  select(daily) %>%
+  na.omit(temp)
+
+temp <- temp_df$daily #vector
+```
+
+```{r}
+humidity_df <- read_excel("relative_humidity.xlsx") %>% 
+  mutate(hourly_humidity = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  group_by(date) %>%
+  summarise(daily = mean(as.numeric(hourly_humidity), na.rm = TRUE)) %>%
+  select(daily) %>%
+  na.omit(humidity)
+
+humidity <- humidity_df$daily #vector
+```
+
+
+
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+
+NN_4 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg= cbind(fourier(msts_load, K=c(2,12)), temp, humidity))
+
+temp_July <- forecast(auto.arima(temp), h = 31) #forecasting future 31 from the vector
+humidity_July <- forecast(auto.arima(humidity), h = 31) #forecasting future 31 from the vector (must have to include below)
+
+NN_4_forecast <- forecast(NN_4, h=31,
+                   xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
+                               temp_July$mean,   
+                               humidity_July$mean))
+
+#create dataframe /prep for export 
+NN_4_df <- data.frame(load = NN_4_forecast$mean)
+NN_4_df <- NN_4_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_4_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_4_df, 'Submissions/NN_4.csv')
+```
+
+#prophet
+```{r}
+
+
+
+```
+
 
