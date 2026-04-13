@@ -155,7 +155,7 @@ write_csv(NN_3_df, 'Submissions/NN_3.csv')
 
 
 Should add temp and humidity to improve my best model - NN_2!
-#neural network, p=7 P=0, K=2,12 + temp and humidity variables
+#neural network, p=10 P=0, K=2,12 + temp and humidity variables
 ```{r}
 temp_df <- read_excel("temperature.xlsx") %>% 
   mutate(hourly_temp = rowMeans(across(3:26), na.rm = TRUE)) %>% 
@@ -185,17 +185,17 @@ humidity <- humidity_df$daily #vector
 ```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
 
 NN_4 <- nnetar(msts_load,
-                 p=7,
+                 p=10,
                  P=0,
                  xreg= cbind(fourier(msts_load, K=c(2,12)), temp, humidity))
 
-temp_July <- forecast(auto.arima(temp), h = 31) #forecasting future 31 from the vector
-humidity_July <- forecast(auto.arima(humidity), h = 31) #forecasting future 31 from the vector (must have to include below)
+temp_July <- forecast(tbats(temp), h = 31) #forecasting future 31 from the vector
+humidity_July <- forecast(tbats(humidity), h = 31) #forecasting future 31 from the vector (must have to include below)
 
-NN_4_forecast <- forecast(NN_4, h=31,
+NN_4_forecast <- forecast(NN_4,
                    xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
-                               temp_July$mean,   
-                               humidity_July$mean))
+                               as.numeric(temp_July$mean),   
+                               as.numeric(humidity_July$mean))) #must get ts forecasts for temp and humidity back into vectors for some reason
 
 #create dataframe /prep for export 
 NN_4_df <- data.frame(load = NN_4_forecast$mean)
@@ -206,10 +206,90 @@ NN_4_df <- NN_4_df %>%
 write_csv(NN_4_df, 'Submissions/NN_4.csv')
 ```
 
-#prophet
 ```{r}
+autoplot(NN_1_forecast$mean)+
+  autolayer(NN_2_forecast$mean)+
+  autolayer(NN_3_forecast$mean)+
+  autolayer(NN_4_forecast$mean) #forecasting temp and humidity with tbats much better than auto.arima() - similar to the other NN forecasts
+```
+
+The forecast for NN_4 including temp and humidity was much worse when using auto.arima() to forecast future values. Performed much better when swapping to TBATS - the auto.arima forecast way below the others as it predicted temp to fall off.
+```{r}
+cor(msts_load, temp)
+cor(msts_load, humidity)
+cor(temp,humidity)
+```
+
+trying one more NN model - this time only temp since its stronger correlated to load than humidity.
 
 
+#neural network, p=7 P=0, K=2,12 + temp variable
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+NN_5 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg= cbind(fourier(msts_load, K=c(2,12)), temp))
+
+temp_July2 <- forecast(tbats(temp), h = 31) #forecasting future 31 from the vector
+
+NN_5_forecast <- forecast(NN_5,
+                   xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
+                               as.numeric(temp_July2$mean)))   
+
+#create dataframe /prep for export 
+NN_5_df <- data.frame(load = NN_5_forecast$mean)
+NN_5_df <- NN_5_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_5_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_5_df, 'Submissions/NN_5.csv')
+```
+
+same model with only temp did not perform better than NN4 or NN2, played with p and P values. NN4 is the best, better with p=10.
+
+#NN6 - reduce K values
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+
+NN_6 <- nnetar(msts_load,
+                 p=10,
+                 P=1,
+                 xreg= cbind(fourier(msts_load, K=c(2,1)), temp, humidity))
+
+NN_6_forecast <- forecast(NN_6,
+                   xreg= cbind(fourier(msts_load, K = c(2,1), h = 31),
+                               as.numeric(temp_July$mean),   
+                               as.numeric(humidity_July$mean))) #must get ts forecasts for temp and humidity back into vectors for some reason
+
+#create dataframe /prep for export 
+NN_6_df <- data.frame(load = NN_6_forecast$mean)
+NN_6_df <- NN_6_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_4_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_6_df, 'Submissions/NN_6.csv')
+```
+
+
+#ARIMA again, trying to add in temp and humidity
+```{r warning=FALSE}
+
+ARIMAF_1 <- auto.arima(msts_load, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg= cbind(fourier(msts_load, K=c(2,12)), temp, humidity))
+
+ARIMAF_1_forecast<- forecast(ARIMAF_1,
+                        xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
+                               as.numeric(temp_July$mean),   
+                               as.numeric(humidity_July$mean)), h=31)
+
+#create dataframe /prep for export 
+ARIMAF_1_df <- data.frame(load = ARIMAF_1_forecast$mean)
+ARIMAF_1_df <- ARIMAF_1_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(ARIMAF_1_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(ARIMAF_1_df, 'Submissions/ARIMAF_1.csv')
 
 ```
 
