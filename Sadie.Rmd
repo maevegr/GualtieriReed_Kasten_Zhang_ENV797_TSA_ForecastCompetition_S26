@@ -180,8 +180,7 @@ humidity_df <- read_excel("relative_humidity.xlsx") %>%
 humidity <- humidity_df$daily #vector
 ```
 
-
-
+#created temp and humidity forecasts for July here!
 ```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
 
 NN_4 <- nnetar(msts_load,
