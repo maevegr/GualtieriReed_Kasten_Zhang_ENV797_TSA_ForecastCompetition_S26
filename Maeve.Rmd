@@ -21,16 +21,28 @@ library(writexl)
 # Load in data set
 
 ```{r}
-load_full <- read_excel("load.xlsx") %>% 
+load_full <- read_excel("Downloads/load.xlsx") %>% 
   mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
   mutate(date = ymd(date)) %>% 
   select(date,daily)
 
+#load_full <- read_excel("load.xlsx") %>% 
+ # mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+ # mutate(date = ymd(date)) %>% 
+ # select(date,daily)
+
 load_train <- load_full %>% 
   filter(date < as.Date("2010-07-01"))
 
-temp_full <- read.csv("data/temp_processed.csv")
-humidity_full <- read.csv("data/humidity_processed.csv")
+load_test <- load_full %>% 
+  filter(date >= as.Date("2010-07-01")) %>% 
+  filter(date <= as.Date("2010-07-31"))
+
+temp_full <- read.csv("Downloads/temp_processed.csv")
+humidity_full <- read.csv("Downloads/humidity_processed.csv")
+
+#temp_full <- read.csv("data/temp_processed.csv")
+#humidity_full <- read.csv("data/humidity_processed.csv")
 ```
 
 # Create time series object
@@ -43,6 +55,9 @@ ts_load_full <- msts(load_full$daily,
 ts_load_train <- msts(load_train$daily, 
                 seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
                 start=c(2005,1,1))
+
+ts_load_test <- subset(ts_load_full, start = length(ts_load_full)- 364,
+                       end = length(ts_load_full)-334)
 ```
 
 # Examine data
@@ -55,82 +70,167 @@ autoplot(ts_load_train)
 # Models
 
 ## ARIMA + fourier
-### Model 1: k = 2,12; no exog
+### ARIMA 212
 ```{r}
-ARIMA_Four_train <- auto.arima(ts_load_train, 
+ARIMA_212 <- auto.arima(ts_load_train, 
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=fourier(ts_load_train, 
-                                          K=c(2,12)),
-                             approximation = TRUE
+                                          K=c(2,12))
                              )
 
 #Forecast with ARIMA fit
 #also need to specify h for fourier terms
-ARIMA_Four_train_forecast <- forecast(ARIMA_Four_fit,
+ARIMA_212_forecast <- forecast(ARIMA_212,
                            xreg=fourier(ts_load_train,
                                         K=c(2,12),
                                         h=31),
                            h=31
                            ) 
 
-#Plot foresting results
-autoplot(ARIMA_Four_train_forecast) + ylab("Load")
+ARIMA_212_scores <- accuracy(ARIMA_212_forecast$mean, ts_load_test)
 
-#Plot model + observed data
-autoplot(ts_load_full) +
-  autolayer(ARIMA_Four_train_forecast, series="ARIMA_FOURIER",PI=FALSE) +
-  ylab("Load")
-
-#Train and forecast with full data set
-ARIMA_Four_full <- auto.arima(ts_load_full, 
-                             seasonal=FALSE, 
-                             lambda=0,
-                             xreg=fourier(ts_load_full, 
-                                          K=c(2,12)),
-                             approximation = TRUE
-                             )
-
-ARIMA_Four_full_forecast <- forecast(ARIMA_Four_fit,
-                           xreg=fourier(ts_load_train,
-                                        K=c(2,12),
-                                        h=31),
-                           h=31
-                           ) 
-
-ARIMA_four1<- data.frame(
+ARIMA_212_data<- data.frame(
   date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
-  value = ARIMA_Four_full_forecast$mean
+  value = ARIMA_212_forecast$mean
 )
 
-write_csv(ARIMA_four1, 'Submissions/ARIMAfour1.csv')
+write_csv(ARIMA_212_data, 'Submissions/ARIMAfour1.csv')
 ```
 
-### Model 2: k = 2,12; include temp and humidity
+### Exog111: k = 1,11; include temp and humidity
 Chatgpt used to understand how to include temp and humidity along with fourier in xreg
 
 ```{r}
-fourier_terms <- fourier(ts_load_full, K=c(2,12))
+fourier_terms <- fourier(ts_load_full, K=c(1,11))
 xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
   head(-1) %>% 
   select(avg_temp, avg_humidity) %>% 
-  cbind(fourier_terms)
+  cbind(fourier_terms) %>% 
+  as.matrix()
 
-write_csv(xreg_data,"data/xreg_data.csv")
-
-#might need matrix? still not working
-
-ARIMA_Four_full2 <- auto.arima(ts_load_full, 
+ARIMA_exog111 <- auto.arima(ts_load_full, 
                              seasonal=FALSE, 
                              lambda=0,
-                             xreg=xred_data
+                             xreg=xreg_data
                              )
 
-ARIMA_Four_full_forecast2 <- forecast(ARIMA_Four_full2,
-                           xreg=xreg_data,
+ARIMA_exog111_forecast2 <- forecast(ARIMA_exog111,
+                           xreg=xreg_data, #internet is telling me I need to have future exog values?
                            h=31
                            ) 
 ```
+### Run a loop
+
+```{r}
+results <- data.frame()
+for (k1 in 1:3) {
+  for (k2 in 8:15) {
+    fit <- auto.arima(ts_load_train,
+                      xreg = fourier(ts_load_train, K = c(k1, k2)),
+                      seasonal = FALSE)
+    forecast <- forecast(fit,
+                           xreg=fourier(ts_load_train,
+                                        K=c(k1,k2),
+                                        h=31),
+                           h=31
+                           ) 
+    scores<- accuracy(forecast$mean, ts_load_test)
+    results <- rbind(results,
+                     data.frame(K1=k1, K2=k2, scores))
+  }
+}
+```
+
+
+### Top 4 model AIC
+
+```{r}
+
+ARIMA_110 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(1,10))
+                             )
+
+ARIMA_18 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(1,8))
+                             )
+
+ARIMA_111 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(1,11))
+                             )
+
+ARIMA_310 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(3,10))
+                             )
+
+ARIMA_38 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(3,8))
+                             )
+
+ARIMA_311 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(3,11))
+                             )
+
+
+AIC <- data.frame() %>% 
+  rbind(data.frame(Model=110, AIC = AIC(ARIMA_110))) %>% 
+  rbind(data.frame(Model=18, AIC = AIC(ARIMA_18))) %>% 
+  rbind(data.frame(Model=111, AIC = AIC(ARIMA_111))) %>% 
+  rbind(data.frame(Model=310, AIC = AIC(ARIMA_310))) %>% 
+  rbind(data.frame(Model=38, AIC = AIC(ARIMA_38))) %>% 
+  rbind(data.frame(Model=311, AIC = AIC(ARIMA_311)))
+  
+  
+
+```
+
+
+### Full forecast for top 3 models
+```{r}
+#Plot model + observed data
+
+#Train and forecast with full data set
+ARIMA_38_full <- auto.arima(ts_load_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_full, 
+                                          K=c(3,8)),
+                             approximation = TRUE
+                             )
+
+ARIMA_38_full_forecast <- forecast(ARIMA_38_full,
+                           xreg=fourier(ts_load_train,
+                                        K=c(3,8),
+                                        h=31),
+                           h=31
+                           ) 
+
+ARIMA_38_data<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_38_full_forecast$mean
+)
+
+write_csv(ARIMA_38_data, 'ARIMA_38.csv')
+```
+
 
 ## ETS
 ```{r}
@@ -154,5 +254,7 @@ ETS_output1<- data.frame(
 )
 
 write_csv(ETS_output1, 'Submissions/ETS1.csv')
+```
+
 ```
 
