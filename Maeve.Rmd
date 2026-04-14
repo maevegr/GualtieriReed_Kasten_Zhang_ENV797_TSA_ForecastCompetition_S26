@@ -39,7 +39,18 @@ load_test <- load_full %>%
   filter(date <= as.Date("2010-07-31"))
 
 temp_full <- read.csv("Downloads/temp_processed.csv")
+temp_train<- temp_full %>% 
+  filter(date < as.Date("2010-07-01"))
+temp_test <- temp_full %>% 
+  filter(date >= as.Date("2010-07-01")) %>% 
+  filter(date <= as.Date("2010-07-31"))
+
 humidity_full <- read.csv("Downloads/humidity_processed.csv")
+humidity_train<- humidity_full %>% 
+  filter(date < as.Date("2010-07-01"))
+humidity_test <- humidity_full %>% 
+  filter(date >= as.Date("2010-07-01")) %>% 
+  filter(date <= as.Date("2010-07-31"))
 
 #temp_full <- read.csv("data/temp_processed.csv")
 #humidity_full <- read.csv("data/humidity_processed.csv")
@@ -58,6 +69,14 @@ ts_load_train <- msts(load_train$daily,
 
 ts_load_test <- subset(ts_load_full, start = length(ts_load_full)- 364,
                        end = length(ts_load_full)-334)
+
+ts_temp_full<- msts(temp_full$avg_temp, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
+
+ts_humid_full <- msts(humidity_full$avg_humidity, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
 ```
 
 # Examine data
@@ -102,25 +121,156 @@ write_csv(ARIMA_212_data, 'Submissions/ARIMAfour1.csv')
 Chatgpt used to understand how to include temp and humidity along with fourier in xreg
 
 ```{r}
-fourier_terms <- fourier(ts_load_full, K=c(1,11))
+fourier_terms <- fourier(ts_load_full, K=c(3,8))
 xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
   head(-1) %>% 
   select(avg_temp, avg_humidity) %>% 
   cbind(fourier_terms) %>% 
   as.matrix()
 
-ARIMA_exog111 <- auto.arima(ts_load_full, 
+
+ARIMA_exog38 <- auto.arima(ts_load_full, 
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=xreg_data
                              )
 
-ARIMA_exog111_forecast2 <- forecast(ARIMA_exog111,
-                           xreg=xreg_data, #internet is telling me I need to have future exog values?
+ARIMA_temp <- auto.arima(ts_temp_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_temp_full, 
+                                          K=c(2,12))
+                             )
+
+ARIMA_humid <- auto.arima(ts_humid_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_humid_full, 
+                                          K=c(2,12))
+                             )
+
+ARIMA_temp_forecast <- forecast(ARIMA_temp,
+                           xreg=fourier(ts_temp_full, 
+                                           K=c(2,12),
+                                        h=31),
+                           h=31
+                             )
+
+ARIMA_humid_forecast <- forecast(ARIMA_humid,
+                           xreg=fourier(ts_humid_full, 
+                                           K=c(2,12),
+                                        h=31),
+                           h=31
+                             )
+
+temp_forecast <- data.frame(avg_temp = ARIMA_temp_forecast$mean)
+humid_forecast <- data.frame(avg_humidity = ARIMA_humid_forecast$mean)
+
+fourier_terms_forecast <- fourier(ts_load_full, K=c(3,8), h= 31)
+xreg_data_forecast <- cbind(temp_forecast,humid_forecast,fourier_terms_forecast) %>% 
+  as.matrix()
+
+
+ARIMA_exog38_forecast <- forecast(ARIMA_exog38,
+                           xreg=xreg_data_forecast,
                            h=31
                            ) 
+
+ARIMA_exog38_data<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_exog38_forecast$mean
+)
+
+write_csv(ARIMA_exog38_data, 'ARIMA_exog38_data.csv')
 ```
-### Run a loop
+### exog w tbat forecast
+```{r}
+fourier_terms <- fourier(ts_load_full, K=c(3,8))
+xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
+  head(-1) %>% 
+  select(avg_temp, avg_humidity) %>% 
+  cbind(fourier_terms) %>% 
+  as.matrix()
+
+
+ARIMA_exog38 <- auto.arima(ts_load_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=xreg_data
+                             )
+temp_clean <- na.interp(temp_full$avg_temp)
+temp_tbats <- tbats(temp_clean)
+temp_tbats_forecast <- forecast(temp_tbats, h = 31)
+
+humid_clean <- na.interp(humidity_full$avg_humidity)
+humid_tbats <- tbats(humid_clean)
+humid_tbats_forecast <- forecast(humid_tbats, h = 31)
+
+temp_forecast <- data.frame(avg_temp = temp_tbats_forecast$mean)
+humid_forecast <- data.frame(avg_humidity = humid_tbats_forecast$mean)
+
+fourier_terms_forecast <- fourier(ts_load_full, K=c(3,8), h= 31)
+xreg_data_forecast <- cbind(temp_forecast,humid_forecast,fourier_terms_forecast) %>% 
+  as.matrix()
+
+
+ARIMA_exog38_forecast <- forecast(ARIMA_exog38,
+                           xreg=xreg_data_forecast,
+                           h=31
+                           ) 
+
+ARIMA_exog38tbats_data<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_exog38_forecast$mean
+)
+
+write_csv(ARIMA_exog38tbats_data, 'ARIMA_exog38tbats_data.csv')
+```
+### Run a lop for exog
+
+```{r}
+
+temp_clean <- na.interp(temp_train$avg_temp)
+temp_clean_df <- data.frame(avg_temp = temp_clean)
+temp_tbats <- tbats(temp_clean)
+temp_tbats_forecast <- forecast(temp_tbats, h = 31)
+
+
+humid_clean <- na.interp(humidity_train$avg_humidity)
+humid_clean_df <- data.frame(avg_humidity = humid_clean)
+humid_tbats <- tbats(humid_clean)
+humid_tbats_forecast <- avg_humidity=forecast(humid_tbats, h = 31)
+
+
+temp_forecast <- data.frame(avg_temp = temp_tbats_forecast$mean)
+humid_forecast <- data.frame(avg_humidity = humid_tbats_forecast$mean)
+
+results <- data.frame()
+for (k1 in 1:2) {
+  for (k2 in 8:9) {
+    xreg_fit <- cbind(temp_clean_df,humid_clean_df,
+                                   fourier(ts_load_train, K = c(k1,k2))) %>% 
+      as.matrix()
+    fit <- auto.arima(ts_load_train,
+                      xreg = xreg_fit,
+                      seasonal = FALSE)
+    xreg_forecast <- cbind(temp_forecast, humid_forecast, fourier(ts_load_train,
+                                        K=c(k1,k2),
+                                        h=31)) %>% 
+      as.matrix()
+    forecast <- forecast(fit,
+                           xreg=xreg_forecast,
+                           h=31
+                           ) 
+    scores<- accuracy(forecast$mean, ts_load_test)
+    results <- rbind(results,
+                     data.frame(K1=k1, K2=k2, scores))
+  }
+}
+```
+
+
+### Run a loop for no exog
 
 ```{r}
 results <- data.frame()
@@ -212,8 +362,7 @@ ARIMA_38_full <- auto.arima(ts_load_full,
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=fourier(ts_load_full, 
-                                          K=c(3,8)),
-                             approximation = TRUE
+                                          K=c(3,8))
                              )
 
 ARIMA_38_full_forecast <- forecast(ARIMA_38_full,
