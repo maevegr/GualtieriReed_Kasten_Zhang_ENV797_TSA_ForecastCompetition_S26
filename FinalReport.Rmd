@@ -1,5 +1,5 @@
 ---
-title: "Final Report"
+title: "TSA Forecast Competition Final Report"
 author: "Maeve Gualtieri-Reed, Sadie Kasten, Leo Zhang"
 date: "2026-04-22"
 output: pdf_document
@@ -22,13 +22,9 @@ library(writexl)
 ```
 
 #Introduction
-
+...
 
 #Methods
-
-
-
-#Analysis
 ```{r, include=F}
 load <- read_excel("load.xlsx") %>% 
   mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
@@ -42,9 +38,54 @@ msts_load <- msts(load$daily,
                 start=c(2005,1,1))
 ```
 
-The first of the five top models that performed well against the actual data for July 2011 was created using the TBATS forecasting model. This model was trained using the simply the load data and forecast for the month of July. The MAPE score of this forecasting model was XXXX.
-The results are plotted below.
-```{r}
+Model selection was determined by which were forecasting models would be best suited to handle load data and exogenous variables if used. The TBATS, ARIMA + fourier terms, ETS, and Neural Network forecasting models were all selected as testing candidates.
+
+Exogenous variables were loaded and turned into vectors. To be used successfully in the model forecast, forecasts of the exogenous variables also had to be constructed. This was done with the TBATS model after comparison between ARIMA and TBATS on one forecasting model proved better results via the TBATS forecast of the variables.
+
+```{r, echo=F}
+temp_df <- read_excel("temperature.xlsx") %>% 
+  mutate(hourly_temp = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  group_by(date) %>%
+  summarise(daily = mean(as.numeric(hourly_temp), na.rm = TRUE)) %>%
+  select(daily) %>%
+  na.omit(temp)
+
+temp <- temp_df$daily #vector
+```
+
+```{r, echo=F}
+humidity_df <- read_excel("relative_humidity.xlsx") %>% 
+  mutate(hourly_humidity = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  group_by(date) %>%
+  summarise(daily = mean(as.numeric(hourly_humidity), na.rm = TRUE)) %>%
+  select(daily) %>%
+  na.omit(humidity)
+
+humidity <- humidity_df$daily #vector
+```
+
+
+```{r, echo=T}
+temp_July <- forecast(tbats(temp), h = 31) #forecasting future 31 from the vector
+humidity_July <- forecast(tbats(humidity), h = 31) #forecasting future 31 from the vector 
+```
+
+
+Exogenous variables were tested via correlation tests to determine if both should be included in the forecasting models. Based on correlation tests and testing models with and without each variable, both exogenous variables were used, if used in a forecasting model.
+
+```{r, echo=T}
+cor(msts_load, temp)
+cor(msts_load, humidity)
+cor(temp,humidity)
+```
+
+#Results
+##TBATS
+The first of the five top models that performed best against the actual data for July 2011 was created using the TBATS forecasting model. This model was trained using the simply the load data and forecast for the month of July. The MAPE score of this forecasting model was 0.0998.
+The forecast result is plotted below.
+```{r, echo=T}
 #TBATS for for load no training
 TBATS_model <- tbats(msts_load)
 
@@ -53,7 +94,62 @@ TBATS_forecast <- forecast(TBATS_model, h=31)
 plot(TBATS_forecast)
 ```
 
+##Neural Network
+Below are the two Neural Network models that also ranked among our top 5 forecasts based on actual data.
+
+The first Neural Network model includes exogenous variables for temperature and humidity as well as exogenous K values 2 and 12 after testing multiple versions of K value options. The MAPE score for this forecast was 0.1169 after optimization.
+
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+NN_4 <- nnetar(msts_load,
+                 p=10,
+                 P=0,
+                 xreg= cbind(fourier(msts_load, K=c(2,12)), temp, humidity))
+
+NN_4_forecast <- forecast(NN_4,
+                   xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
+                               as.numeric(temp_July$mean),   
+                               as.numeric(humidity_July$mean))) #must get ts forecasts for temp and humidity back into vectors 
+
+plot(NN_4_forecast)
+```
+
+The second Neural Network model also includes exogenous variables for temperature and humidity as well as exogenous K values 2 and 1 after testing multiple versions of K value options. The MAPE score for this forecast was 0.1134 after optimization.
+
+```{r NNETAR, echo=TRUE, message=FALSE, warning=FALSE}
+
+NN_6 <- nnetar(msts_load,
+                 p=10,
+                 P=1,
+                 xreg= cbind(fourier(msts_load, K=c(2,1)), temp, humidity))
+
+NN_6_forecast <- forecast(NN_6,
+                   xreg= cbind(fourier(msts_load, K = c(2,1), h = 31),
+                               as.numeric(temp_July$mean),   
+                               as.numeric(humidity_July$mean)))
+plot(NN_6_forecast)
+```
 
 
+##ARIMA + Fourier Terms
+Similar to the Neural Network models, the ARIMA models that ranked best compared to the actual data also included exogenous variables for temperature and humidity.
 
-#Conclusions
+Our highest performing ARIMA model, and model overall, included fourier terms where K= 2 and 12 and temp and humidity forecasts were included. The MAPE score for this forecast was 0.0965 after optimization.
+
+```{r warning=FALSE}
+
+ARIMAF_1 <- auto.arima(msts_load, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg= cbind(fourier(msts_load, K=c(2,12)), temp, humidity))
+
+ARIMAF_1_forecast<- forecast(ARIMAF_1,
+                        xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
+                               as.numeric(temp_July$mean),   
+                               as.numeric(humidity_July$mean)), h=31)
+
+plot(ARIMAF_1_forecast)
+```
+
+Another ARIMA model...
+
+#Analysis and Conclusions
