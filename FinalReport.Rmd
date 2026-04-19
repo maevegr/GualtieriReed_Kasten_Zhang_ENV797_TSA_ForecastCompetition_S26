@@ -1,7 +1,7 @@
 ---
 title: "Final Report"
-author: "Maeve Gualtieri-Reed"
-date: "2026-03-31"
+author: "Maeve Gualtieri-Reed, Sadie Kasten, Leo Zhang"
+date: "2026-04-22"
 output: pdf_document
 ---
 
@@ -9,22 +9,51 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r, include=F}
+library(here)
+library(readxl)
+library(dplyr)
+library(tidyverse)
+library(forecast)
+library(cowplot)
+library(smooth)
+library(writexl)
 ```
 
-## Including Plots
+#Introduction
 
-You can also embed plots, for example:
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#Methods
+
+
+
+#Analysis
+```{r, include=F}
+load <- read_excel("load.xlsx") %>% 
+  mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  select(date,daily)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r, include=F}
+msts_load <- msts(load$daily, 
+                seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
+                start=c(2005,1,1))
+```
+
+The first of the five top models that performed well against the actual data for July 2011 was created using the TBATS forecasting model. This model was trained using the simply the load data and forecast for the month of July. The MAPE score of this forecasting model was XXXX.
+The results are plotted below.
+```{r}
+#TBATS for for load no training
+TBATS_model <- tbats(msts_load)
+
+TBATS_forecast <- forecast(TBATS_model, h=31)
+
+plot(TBATS_forecast)
+```
+
+
+
+
+#Conclusions
