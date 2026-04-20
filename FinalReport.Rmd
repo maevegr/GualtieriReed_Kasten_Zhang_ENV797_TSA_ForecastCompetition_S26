@@ -150,6 +150,6 @@ ARIMAF_1_forecast<- forecast(ARIMAF_1,
 plot(ARIMAF_1_forecast)
 ```
 
-Another ARIMA model...
+Another ARIMA model...  
 
 #Analysis and Conclusions
