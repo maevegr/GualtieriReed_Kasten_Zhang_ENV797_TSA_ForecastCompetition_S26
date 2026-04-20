@@ -121,7 +121,7 @@ write_csv(ARIMA_212_data, 'Submissions/ARIMAfour1.csv')
 Chatgpt used to understand how to include temp and humidity along with fourier in xreg
 
 ```{r}
-fourier_terms <- fourier(ts_load_full, K=c(3,8))
+fourier_terms <- fourier(ts_load_full, K=c(2,10))
 xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
   head(-1) %>% 
   select(avg_temp, avg_humidity) %>% 
@@ -129,7 +129,7 @@ xreg_data <- left_join(temp_full, humidity_full, by = "date") %>%
   as.matrix()
 
 
-ARIMA_exog38 <- auto.arima(ts_load_full, 
+ARIMA_exog210 <- auto.arima(ts_load_full, 
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=xreg_data
@@ -139,14 +139,14 @@ ARIMA_temp <- auto.arima(ts_temp_full,
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=fourier(ts_temp_full, 
-                                          K=c(2,12))
+                                          K=c(2,10))
                              )
 
 ARIMA_humid <- auto.arima(ts_humid_full, 
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=fourier(ts_humid_full, 
-                                          K=c(2,12))
+                                          K=c(2,10))
                              )
 
 ARIMA_temp_forecast <- forecast(ARIMA_temp,
@@ -185,7 +185,7 @@ write_csv(ARIMA_exog38_data, 'ARIMA_exog38_data.csv')
 ```
 ### exog w tbat forecast
 ```{r}
-fourier_terms <- fourier(ts_load_full, K=c(3,8))
+fourier_terms <- fourier(ts_load_full, K=c(2,10))
 xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
   head(-1) %>% 
   select(avg_temp, avg_humidity) %>% 
@@ -193,7 +193,7 @@ xreg_data <- left_join(temp_full, humidity_full, by = "date") %>%
   as.matrix()
 
 
-ARIMA_exog38 <- auto.arima(ts_load_full, 
+ARIMA_exog210 <- auto.arima(ts_load_full, 
                              seasonal=FALSE, 
                              lambda=0,
                              xreg=xreg_data
@@ -209,22 +209,22 @@ humid_tbats_forecast <- forecast(humid_tbats, h = 31)
 temp_forecast <- data.frame(avg_temp = temp_tbats_forecast$mean)
 humid_forecast <- data.frame(avg_humidity = humid_tbats_forecast$mean)
 
-fourier_terms_forecast <- fourier(ts_load_full, K=c(3,8), h= 31)
+fourier_terms_forecast <- fourier(ts_load_full, K=c(2,10), h= 31)
 xreg_data_forecast <- cbind(temp_forecast,humid_forecast,fourier_terms_forecast) %>% 
   as.matrix()
 
 
-ARIMA_exog38_forecast <- forecast(ARIMA_exog38,
+ARIMA_exog210_forecast <- forecast(ARIMA_exog210,
                            xreg=xreg_data_forecast,
                            h=31
                            ) 
 
-ARIMA_exog38tbats_data<- data.frame(
+ARIMA_exog210tbats_data<- data.frame(
   date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
-  value = ARIMA_exog38_forecast$mean
+  value = ARIMA_exog210_forecast$mean
 )
 
-write_csv(ARIMA_exog38tbats_data, 'ARIMA_exog38tbats_data.csv')
+write_csv(ARIMA_exog210tbats_data, 'ARIMA_exog210tbats_data.csv')
 ```
 ### Run a lop for exog
 
@@ -239,15 +239,15 @@ temp_tbats_forecast <- forecast(temp_tbats, h = 31)
 humid_clean <- na.interp(humidity_train$avg_humidity)
 humid_clean_df <- data.frame(avg_humidity = humid_clean)
 humid_tbats <- tbats(humid_clean)
-humid_tbats_forecast <- avg_humidity=forecast(humid_tbats, h = 31)
+humid_tbats_forecast <- forecast(humid_tbats, h = 31)
 
 
 temp_forecast <- data.frame(avg_temp = temp_tbats_forecast$mean)
 humid_forecast <- data.frame(avg_humidity = humid_tbats_forecast$mean)
 
 results <- data.frame()
-for (k1 in 1:2) {
-  for (k2 in 8:9) {
+for (k1 in 1:3) {
+  for (k2 in 8:15) {
     xreg_fit <- cbind(temp_clean_df,humid_clean_df,
                                    fourier(ts_load_train, K = c(k1,k2))) %>% 
       as.matrix()
@@ -262,9 +262,10 @@ for (k1 in 1:2) {
                            xreg=xreg_forecast,
                            h=31
                            ) 
+    AIC<- AIC(fit)
     scores<- accuracy(forecast$mean, ts_load_test)
     results <- rbind(results,
-                     data.frame(K1=k1, K2=k2, scores))
+                     data.frame(K1=k1, K2=k2, scores, AIC = as.numeric(AIC)))
   }
 }
 ```
