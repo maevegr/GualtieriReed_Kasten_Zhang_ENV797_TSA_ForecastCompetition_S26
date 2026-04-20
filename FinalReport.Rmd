@@ -158,7 +158,7 @@ TBATS_data<- data.frame(
   value = TBATS_forecast$mean
 )
 
-write_csv(TBATS_data, 'Submissions/TBATS_data.csv')
+#write_csv(TBATS_data, 'Submissions/TBATS_data.csv')
 ```
 
 ## Neural Network 
@@ -220,7 +220,7 @@ NN_4_data<- data.frame(
   value = NN_4_forecast$mean
 )
 
-write_csv(NN_4_data, 'Submissions/NN_4_data.csv')
+#write_csv(NN_4_data, 'Submissions/NN_4_data.csv')
 ```
 
 The second Neural Network model also includes exogenous variables for temperature and humidity as well as exogenous K values 2 and 1 after testing multiple versions of K value options. The MAPE score for this forecast was 0.1134 after optimization.
@@ -276,7 +276,7 @@ NN_6_data<- data.frame(
   value = NN_6_forecast$mean
 )
 
-write_csv(NN_6_data, 'Submissions/NN_6_data.csv')
+#write_csv(NN_6_data, 'Submissions/NN_6_data.csv')
 ```
 
 ## ARIMA + Fourier Terms 
@@ -301,7 +301,7 @@ ARIMAF_train1 <- auto.arima(ts_load_train,
 temp <- temp_test
 humidity <- humidity_test
 
-ARIMAF_1_forecast<- forecast(ARIMAF_train1,
+ARIMAF_train_forecast1<- forecast(ARIMAF_train1,
                         xreg= cbind(fourier(ts_load_train, K = c(2,12), h = 31),
                                temp,   
                                humidity), h=31)
@@ -310,11 +310,11 @@ autoplot(ts_load_test)+
   autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
   autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
   autolayer(NN_train_forecast2, series = "NN (K = 2,1)", PI = FALSE)+
-  autolayer(ARIMAF_1_forecast, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
+  autolayer(ARIMAF_train_forecast1, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
   ylab("Load")+
   xlab("July 2010")
 
-accuracy(ARIMAF_1_forecast$mean, ts_load_test)
+accuracy(ARIMAF_train_forecast1$mean, ts_load_test)
 
 ```
 
@@ -334,13 +334,13 @@ plot(ARIMAF_1_forecast)
 
 ARIMAF_1_data<- data.frame(
   date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
-  value = ARIMAF_1_forecastt$mean
+  value = ARIMAF_1_forecast$mean
 )
 
-write_csv(ARIMAF_1_data, 'Submissions/ARIMAF_1_data.csv')
+#write_csv(ARIMAF_1_data, 'Submissions/ARIMAF_1_data.csv')
 ```
 
-A loop was run for k values between 1 and 3 for the weekly seasonality and between 8 and 15 for the annual seasonality. K = 2,10 yielded the best MAPE score and all AIC values were fairly similar. It did not however beat out the K = 2,12. Therefore, the test window wasn't a perfect estimate of the actual forecasting window for model fitting. 
+A loop was run for k values between 1 and 3 for the weekly seasonality and between 8 and 15 for the annual seasonality. K = 2,10 yielded the best MAPE score and all AIC values were fairly similar. It did not however beat out the K = 2,12 after uploading to Kaggle. Therefore, the test window wasn't a perfect estimate of the actual forecasting window for model fitting. 
 
 ```{r echo=TRUE, warning=FALSE}
 
@@ -359,7 +359,7 @@ ARIMAF_train2 <- auto.arima(ts_load_train,
 temp <- temp_test
 humidity <- humidity_test
 
-ARIMAF_2_forecast<- forecast(ARIMAF_train2,
+ARIMAF_train_forecast2<- forecast(ARIMAF_train2,
                         xreg= cbind(fourier(ts_load_train, K = c(2,10), h = 31),
                                temp,   
                                humidity), h=31)
@@ -368,12 +368,12 @@ autoplot(ts_load_test)+
   autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
   autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
   autolayer(NN_train_forecast2, series = "NN (K = 2,1)", PI = FALSE)+
-  autolayer(ARIMAF_1_forecast, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
-  autolayer(ARIMAF_2_forecast, series = "ARIMA+Fourier (K = 2,10)", PI = FALSE)+
+  autolayer(ARIMAF_train_forecast1, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
+  autolayer(ARIMAF_train_forecast2, series = "ARIMA+Fourier (K = 2,10)", PI = FALSE)+
   ylab("Load")+
   xlab("July 2010")
 
-accuracy(ARIMAF_2_forecast$mean, ts_load_test)
+accuracy(ARIMAF_train_forecast2$mean, ts_load_test)
 ```
 
 ```{r echo=TRUE, warning=FALSE}
@@ -392,10 +392,10 @@ plot(ARIMAF_2_forecast)
 
 ARIMAF_2_data<- data.frame(
   date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
-  value = ARIMAF_1_forecastt$mean
+  value = ARIMAF_2_forecast$mean
 )
 
-write_csv(ARIMAF_2_data, 'Submissions/ARIMAF_1_data.csv')
+#write_csv(ARIMAF_2_data, 'Submissions/ARIMAF_1_data.csv')
 
 ```
 
@@ -419,7 +419,7 @@ summary <- data.frame() %>%
   select(Name, July2011MAPE, ME,RMSE,MAE,MPE,MAPE,ACF1,`Theil's U`)
 
 kbl(summary, 
-      caption = "Forecast Accuracy for Daily Active Power",
+      caption = "Forecast Accuracy for Electricy Load",
       digits = array(5,ncol(summary))) %>%
   kable_styling(full_width = FALSE, position = "center", latex_options = "hold_position")
   
