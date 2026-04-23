@@ -21,6 +21,7 @@ library(smooth)
 library(writexl)
 library(tinytex)
 library(kableExtra)
+library(knitr)
 ```
 
 # Introduction 
@@ -35,14 +36,14 @@ ChatGPT was used to learn how to add exogenous variables to ARIMA + Fourier and 
 
 The load data was uploaded and converted to daily data. It was converted to a time series using msts().
 
-```{r echo=TRUE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 load <- read_excel("load.xlsx") %>% 
   mutate(daily = rowMeans(across(3:26), na.rm = TRUE)) %>% 
   mutate(date = ymd(date)) %>% 
   select(date,daily)
 ```
 
-```{r echo=TRUE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 msts_load <- msts(load$daily, 
                 seasonal.periods =c(7,365.25), #7 = weekly, 365.25 = yearly 
                 start=c(2005,1,1))
@@ -50,7 +51,7 @@ msts_load <- msts(load$daily,
 
 A training and testing section of the data were separated out in order to estimate model suitability before uploading into Kaggle
 
-```{r echo=TRUE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 
 ts_load_train <- subset(msts_load,
                        end = length(msts_load)-366)
@@ -62,15 +63,18 @@ ts_load_test <- subset(msts_load, start = length(msts_load)- 365,
 
 The data was examined to determine what types of models might be most suitable for the data. It is clear there are strong multiple seasonalities which indicates ARIMA + Fourier and TBATS will be good candidates. ETS + STL may not be a great model because it seems that the seasonality is not perfectly stable as indicated by the persistence of some kind of pattern in the decomposition residuals. Neural network will also be explored to see if there are non-linear patterns that are better predicted through a learning model.
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.cap="Plot of Raw Data"}
 autoplot(msts_load)
+```
+
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.cap = "Decomposition"}
 decomp <- msts_load %>% mstl() 
 autoplot(decomp)
 ```
 
 Exogenous variables were loaded and turned into vectors. To be used successfully in the model forecast, forecasts of the exogenous variables also had to be constructed. This was done with the TBATS model after comparison between ARIMA and TBATS on one forecasting model proved better results via the TBATS forecast of the variables.
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 temp_df <- read_excel("temperature.xlsx") %>% 
   mutate(hourly_temp = rowMeans(across(3:26), na.rm = TRUE)) %>% 
   mutate(date = ymd(date)) %>% 
@@ -85,7 +89,7 @@ temp_train <- temp[1:(length(temp) - 366)]
 temp_test <- temp[(length(temp) - 365):(length(temp) - 335)]
 ```
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 humidity_df <- read_excel("relative_humidity.xlsx") %>% 
   mutate(hourly_humidity = rowMeans(across(3:26), na.rm = TRUE)) %>% 
   mutate(date = ymd(date)) %>% 
@@ -100,20 +104,22 @@ humidity_train <- humidity[1:(length(humidity) - 366)]
 humidity_test <- humidity[(length(humidity) - 365):(length(humidity) - 335)]
 ```
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 temp_July <- forecast(tbats(temp), h = 31) #forecasting future 31 from the vector
 humidity_July <- forecast(tbats(humidity), h = 31) #forecasting future 31 from the vector 
 ```
 
 Exogenous variables were tested via correlation tests to determine if both should be included in the forecasting models. Based on correlation tests and testing models with and without each variable, both exogenous variables were used, if used in a forecasting model.
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 cor(msts_load, temp)
 cor(msts_load, humidity)
 cor(temp,humidity)
 ```
 
 Model selection was determined by which were forecasting models would be best suited to handle load data and exogenous variables if used. The TBATS, ARIMA + fourier terms, ETS, and Neural Network forecasting models were all selected as testing candidates.
+
+\newpage
 
 # Results
 
@@ -130,22 +136,17 @@ Additional models, including ETS + STL, ARIMA + Fourier and NN without exogenous
 ## TBATS 
 The first of the five top models that performed best against the actual data for July 2011 was created using the TBATS forecasting model. This model was trained using the simply the load data and forecast for the month of July. The MAPE score of this forecasting model was 0.0998. The forecast result is plotted below.
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 #TBATS Training Forecast & Test Window
 
 TBATS_train <- tbats(ts_load_train)
 
 TBATS_train_forecast <- forecast(TBATS_train, h = 31)
 
-autoplot(ts_load_test)+
-  autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
-  ylab("Load")+
-  xlab("July 2010")
-
 accuracy(TBATS_train_forecast$mean, ts_load_test)
 ```
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.cap="TBATS Forecast"}
 #TBATS July 2011 forecast
 TBATS_model <- tbats(msts_load)
 
@@ -161,12 +162,13 @@ TBATS_data<- data.frame(
 #write_csv(TBATS_data, 'Submissions/TBATS_data.csv')
 ```
 
+\newpage
 ## Neural Network 
 Below are the two Neural Network models that also ranked among our top 5 forecasts based on actual data.
 
 The first Neural Network model includes exogenous variables for temperature and humidity as well as exogenous K values 2 and 12 after testing multiple versions of K value options. The MAPE score for this forecast was 0.1169 after optimization.
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 
 # NN K = 2,12 Training Forecast & Test Window
 
@@ -190,18 +192,12 @@ NN_train_forecast1 <- forecast(NN_train1,
                                temp,   
                                humidity))
 
-autoplot(ts_load_test)+
-  autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
-  autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
-  ylab("Load")+
-  xlab("July 2010")
-
 accuracy(NN_train_forecast1$mean, ts_load_test)
 
 ```
 
 
-```{r, echo=TRUE, message=FALSE, warning=FALSE}
+```{r, echo=TRUE, message=FALSE, warning=FALSE, fig.cap="Neural Network, Version 1"}
 ## NN K = 2,12 July 2011 forecast
 NN_4 <- nnetar(msts_load,
                  p=10,
@@ -225,7 +221,7 @@ NN_4_data<- data.frame(
 
 The second Neural Network model also includes exogenous variables for temperature and humidity as well as exogenous K values 2 and 1 after testing multiple versions of K value options. The MAPE score for this forecast was 0.1134 after optimization.
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 ## NN K = 2,12 Training Forecast & Test Window
 
 #start with train window
@@ -248,17 +244,10 @@ NN_train_forecast2 <- forecast(NN_train2,
                                temp,   
                                humidity))
 
-autoplot(ts_load_test)+
-  autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
-  autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
-  autolayer(NN_train_forecast2, series = "NN (K = 2,1)", PI = FALSE)+
-  ylab("Load")+
-  xlab("July 2010")
-
 accuracy(NN_train_forecast2$mean, ts_load_test)
 ```
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.cap="Neural Network, Version 2"}
 
 NN_6 <- nnetar(msts_load,
                  p=10,
@@ -285,7 +274,7 @@ Similar to the Neural Network models, the ARIMA models that ranked best compared
 Our highest performing ARIMA model, and model overall, included fourier terms where K= 2 and 12 and temp and humidity forecasts were included. The MAPE score for this forecast was 0.0965 after optimization.
 
 Initially, K = 2,12 was used as a baseline estimate for the best K values. Looking at the test window of July 2010, this model does not perform very well compared to the other models. However, using the full dataset to train and forecast July 2011, this model is our best performing with the lowest MAPE.
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 ## ARIMA +FOURIER (K = 2,12) Training Forecast & Test Window
 
 #start with train window
@@ -306,19 +295,11 @@ ARIMAF_train_forecast1<- forecast(ARIMAF_train1,
                                temp,   
                                humidity), h=31)
 
-autoplot(ts_load_test)+
-  autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
-  autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
-  autolayer(NN_train_forecast2, series = "NN (K = 2,1)", PI = FALSE)+
-  autolayer(ARIMAF_train_forecast1, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
-  ylab("Load")+
-  xlab("July 2010")
-
 accuracy(ARIMAF_train_forecast1$mean, ts_load_test)
 
 ```
 
-```{r echo=TRUE, warning=FALSE}
+```{r eecho=TRUE, message=FALSE, warning=FALSE, fig.cap="ARIMA+Fourier, Version 1"}
 
 ARIMAF_1 <- auto.arima(msts_load, 
                              seasonal=FALSE, 
@@ -342,7 +323,7 @@ ARIMAF_1_data<- data.frame(
 
 A loop was run for k values between 1 and 3 for the weekly seasonality and between 8 and 15 for the annual seasonality. K = 2,10 yielded the best MAPE score and all AIC values were fairly similar. It did not however beat out the K = 2,12 after uploading to Kaggle. Therefore, the test window wasn't a perfect estimate of the actual forecasting window for model fitting. 
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE}
 
 ## ARIMA +FOURIER (K = 2,10) Training Forecast & Test Window
 
@@ -364,19 +345,10 @@ ARIMAF_train_forecast2<- forecast(ARIMAF_train2,
                                temp,   
                                humidity), h=31)
 
-autoplot(ts_load_test)+
-  autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
-  autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
-  autolayer(NN_train_forecast2, series = "NN (K = 2,1)", PI = FALSE)+
-  autolayer(ARIMAF_train_forecast1, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
-  autolayer(ARIMAF_train_forecast2, series = "ARIMA+Fourier (K = 2,10)", PI = FALSE)+
-  ylab("Load")+
-  xlab("July 2010")
-
 accuracy(ARIMAF_train_forecast2$mean, ts_load_test)
 ```
 
-```{r echo=TRUE, warning=FALSE}
+```{r echo=TRUE, message=FALSE, warning=FALSE, fig.cap="ARIMA+Fourier, Version 2"}
 
 ARIMAF_2 <- auto.arima(msts_load, 
                              seasonal=FALSE, 
@@ -399,9 +371,11 @@ ARIMAF_2_data<- data.frame(
 
 ```
 
+\newpage
+
 ## Summary of all models
 
-```{r}
+```{r message=FALSE, echo=TRUE, warning=FALSE}
 
 TBATS_score <- round(accuracy(TBATS_train_forecast$mean, ts_load_test),2)
 NN1_score <- round(accuracy(NN_train_forecast1$mean, ts_load_test),2)
@@ -410,7 +384,7 @@ ARIMAF1_score <- round(accuracy(ARIMAF_train_forecast1$mean, ts_load_test),2)
 ARIMAF2_score <- round(accuracy(ARIMAF_train_forecast2$mean, ts_load_test),2)
 
 Names <- c("TBATS","NN K=2,12", "NN K=2,1", "ARIMAF K=2,12", "ARIMAF K=2,10")
-July2011_MAPE <- c("0.0998", "0.1134", "0.1138", "0.0965", "0.0993")
+July2011_MAPE <- c("9.98", "11.34", "11.38", "9.65", "9.93")
 
 summary <- data.frame() %>% 
   rbind(TBATS_score, NN1_score, NN2_score, ARIMAF1_score, ARIMAF2_score) %>% 
@@ -425,6 +399,434 @@ kbl(summary,
   
 ```
 
+```{r message=FALSE, echo=TRUE, warning=FALSE, fig.cap="All Forecasts"}
+all_forecasts<- autoplot(ts_load_test)+
+  autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
+  autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
+  autolayer(NN_train_forecast2, series = "NN (K = 2,1)", PI = FALSE)+
+  autolayer(ARIMAF_train_forecast1, series = "ARIMA+Fourier (K = 2,12)", PI = FALSE)+
+  autolayer(ARIMAF_train_forecast2, series = "ARIMA+Fourier (K = 2,10)", PI = FALSE)+
+  ylab("Load")+
+  xlab("July 2010")
+
+print(all_forecasts)
+```
+
 # Analysis and Conclusions
 
-Using the training set up until June 30th, 2010 and comparing each models forecast for July 2010 to the actual data, the neural network model with terms K = 2,12 was most accurate. However, after using these models to forecast July 2011 using all data and uploading the forecast to Kaggle, the ARIMA + Fourier with terms K = 2,12 yielded the best MAPE score. This indicates that while training and testing models can help determine which model types work best, testing windows may not always estimate the best forecasting model to use. The data should be more deeply explored to determine if July 2010 was an anomaly year or if it displayed a level shift or other major change that would have significantly helped predict July 2011.
+Using the training set up until June 30th, 2010 and comparing each models forecast for July 2010 to the actual data, the neural network model with terms K = 2,12 was the best fit with the lowest MAPE score. However, after using these models to forecast July 2011 using all data and uploading the forecast to Kaggle, the ARIMA + Fourier with terms K = 2,12 yielded the best MAPE score. This indicates that while training and testing models can help determine which model types work best, testing windows may not always estimate the best forecasting model to use. The data should be more deeply explored to determine if July 2010 was an anomaly year or if it displayed a level shift or other major change that would have significantly helped predict July 2011.
+
+# Unused Model Code
+```{r eval=FALSE, include=FALSE}
+#ARIMA 212
+ARIMA_212 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(2,12))
+                             )
+
+#Forecast with ARIMA fit
+#also need to specify h for fourier terms
+ARIMA_212_forecast <- forecast(ARIMA_212,
+                           xreg=fourier(ts_load_train,
+                                        K=c(2,12),
+                                        h=31),
+                           h=31
+                           ) 
+
+ARIMA_212_scores <- accuracy(ARIMA_212_forecast$mean, ts_load_test)
+
+ARIMA_212_data<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_212_forecast$mean
+)
+
+write_csv(ARIMA_212_data, 'Submissions/ARIMAfour1.csv')
+```
+
+```{r eval=FALSE, include=FALSE}
+
+#ARIMA 3,8 with humidity and temp also modeled with ARIMA 2,10
+ARIMA_temp <- auto.arima(ts_temp_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_temp_full, 
+                                          K=c(2,10))
+                             )
+
+ARIMA_humid <- auto.arima(ts_humid_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_humid_full, 
+                                          K=c(2,10))
+                             )
+
+ARIMA_temp_forecast <- forecast(ARIMA_temp,
+                           xreg=fourier(ts_temp_full, 
+                                           K=c(2,12),
+                                        h=31),
+                           h=31
+                             )
+
+ARIMA_humid_forecast <- forecast(ARIMA_humid,
+                           xreg=fourier(ts_humid_full, 
+                                           K=c(2,12),
+                                        h=31),
+                           h=31
+                             )
+
+temp_forecast <- data.frame(avg_temp = ARIMA_temp_forecast$mean)
+humid_forecast <- data.frame(avg_humidity = ARIMA_humid_forecast$mean)
+
+fourier_terms_forecast <- fourier(ts_load_full, K=c(3,8), h= 31)
+xreg_data_forecast <- cbind(temp_forecast,humid_forecast,fourier_terms_forecast) %>% 
+  as.matrix()
+
+
+ARIMA_exog38_forecast <- forecast(ARIMA_exog38,
+                           xreg=xreg_data_forecast,
+                           h=31
+                           ) 
+
+ARIMA_exog38_data<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_exog38_forecast$mean
+)
+
+write_csv(ARIMA_exog38_data, 'ARIMA_exog38_data.csv')
+```
+
+```{r eval=FALSE, include=FALSE}
+#ARIMA k = 2,10 with temp and humidity TBATS
+fourier_terms <- fourier(ts_load_full, K=c(2,10))
+xreg_data <- left_join(temp_full, humidity_full, by = "date") %>% 
+  head(-1) %>% 
+  select(avg_temp, avg_humidity) %>% 
+  cbind(fourier_terms) %>% 
+  as.matrix()
+
+
+ARIMA_exog210 <- auto.arima(ts_load_full, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=xreg_data
+                             )
+temp_clean <- na.interp(temp_full$avg_temp)
+temp_tbats <- tbats(temp_clean)
+temp_tbats_forecast <- forecast(temp_tbats, h = 31)
+
+humid_clean <- na.interp(humidity_full$avg_humidity)
+humid_tbats <- tbats(humid_clean)
+humid_tbats_forecast <- forecast(humid_tbats, h = 31)
+
+temp_forecast <- data.frame(avg_temp = temp_tbats_forecast$mean)
+humid_forecast <- data.frame(avg_humidity = humid_tbats_forecast$mean)
+
+fourier_terms_forecast <- fourier(ts_load_full, K=c(2,10), h= 31)
+xreg_data_forecast <- cbind(temp_forecast,humid_forecast,fourier_terms_forecast) %>% 
+  as.matrix()
+
+
+ARIMA_exog210_forecast <- forecast(ARIMA_exog210,
+                           xreg=xreg_data_forecast,
+                           h=31
+                           ) 
+
+ARIMA_exog210tbats_data<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ARIMA_exog210_forecast$mean
+)
+
+write_csv(ARIMA_exog210tbats_data, 'ARIMA_exog210tbats_data.csv')
+```
+
+```{r eval=FALSE, include=FALSE}
+temp_clean <- na.interp(temp_train$avg_temp)
+temp_clean_df <- data.frame(avg_temp = temp_clean)
+temp_tbats <- tbats(temp_clean)
+temp_tbats_forecast <- forecast(temp_tbats, h = 31)
+
+
+humid_clean <- na.interp(humidity_train$avg_humidity)
+humid_clean_df <- data.frame(avg_humidity = humid_clean)
+humid_tbats <- tbats(humid_clean)
+humid_tbats_forecast <- forecast(humid_tbats, h = 31)
+
+
+temp_forecast <- data.frame(avg_temp = temp_tbats_forecast$mean)
+humid_forecast <- data.frame(avg_humidity = humid_tbats_forecast$mean)
+
+results <- data.frame()
+for (k1 in 1:3) {
+  for (k2 in 8:15) {
+    xreg_fit <- cbind(temp_clean_df,humid_clean_df,
+                                   fourier(ts_load_train, K = c(k1,k2))) %>% 
+      as.matrix()
+    fit <- auto.arima(ts_load_train,
+                      xreg = xreg_fit,
+                      seasonal = FALSE)
+    xreg_forecast <- cbind(temp_forecast, humid_forecast, fourier(ts_load_train,
+                                        K=c(k1,k2),
+                                        h=31)) %>% 
+      as.matrix()
+    forecast <- forecast(fit,
+                           xreg=xreg_forecast,
+                           h=31
+                           ) 
+    AIC<- AIC(fit)
+    scores<- accuracy(forecast$mean, ts_load_test)
+    results <- rbind(results,
+                     data.frame(K1=k1, K2=k2, scores, AIC = as.numeric(AIC)))
+  }
+}
+
+### Run a loop for no exog
+
+results <- data.frame()
+for (k1 in 1:3) {
+  for (k2 in 8:15) {
+    fit <- auto.arima(ts_load_train,
+                      xreg = fourier(ts_load_train, K = c(k1, k2)),
+                      seasonal = FALSE)
+    forecast <- forecast(fit,
+                           xreg=fourier(ts_load_train,
+                                        K=c(k1,k2),
+                                        h=31),
+                           h=31
+                           ) 
+    scores<- accuracy(forecast$mean, ts_load_test)
+    results <- rbind(results,
+                     data.frame(K1=k1, K2=k2, scores))
+  }
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+# Top ARIMA models (no exog) AIC values
+ARIMA_110 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(1,10))
+                             )
+
+ARIMA_18 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(1,8))
+                             )
+
+ARIMA_111 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(1,11))
+                             )
+
+ARIMA_310 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(3,10))
+                             )
+
+ARIMA_38 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(3,8))
+                             )
+
+ARIMA_311 <- auto.arima(ts_load_train, 
+                             seasonal=FALSE, 
+                             lambda=0,
+                             xreg=fourier(ts_load_train, 
+                                          K=c(3,11))
+                             )
+
+
+AIC <- data.frame() %>% 
+  rbind(data.frame(Model=110, AIC = AIC(ARIMA_110))) %>% 
+  rbind(data.frame(Model=18, AIC = AIC(ARIMA_18))) %>% 
+  rbind(data.frame(Model=111, AIC = AIC(ARIMA_111))) %>% 
+  rbind(data.frame(Model=310, AIC = AIC(ARIMA_310))) %>% 
+  rbind(data.frame(Model=38, AIC = AIC(ARIMA_38))) %>% 
+  rbind(data.frame(Model=311, AIC = AIC(ARIMA_311)))
+```
+
+```{r eval=FALSE, include=FALSE}
+#Fit and forecast STL + ETS model to data
+ETS_train1 <-  stlf(ts_load_train,h=31)
+
+#Plot foresting results
+autoplot(ETS_train1) + ylab("Load")
+
+#Plot model + observed data
+autoplot(ts_load_full) +
+  autolayer(ETS_train1, series="STL + ETS",PI=FALSE) +
+  ylab("Load")
+
+ETS_train_scores<- accuracy(ETS_train1$mean,ts_load_full)  
+
+ETS_fit1<- stlf(ts_load_full,h=31)
+ETS_output1<- data.frame(
+  date = seq(as.Date("2011-07-01"), length.out = 31, by = "day"),
+  value = ETS_fit1$mean
+)
+
+write_csv(ETS_output1, 'Submissions/ETS1.csv')
+```
+
+```{r eval=FALSE, include=FALSE}
+#basic TS
+ts_load <- ts(load$daily, start=c(2005,1,1))
+#autoarima
+arima_attempt1 <- auto.arima(ts_load, ic=c("aic"))
+#forecast based on the auto arima model
+arima_forecast1 <- forecast(arima_attempt1, h=31)
+
+#create dataframe /prep for export 
+arima1_df <- data.frame(load = arima_forecast1$mean)
+arima1_df <- arima1_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(arima1_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(arima1_df, 'Submissions/arima1.csv')
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#neural network, p=1 P=0, K=2,12
+#test diff p and P values, also can add xreg with Fourier term for multiple seasonality
+
+NN_1 <- nnetar(msts_load,
+                 p=1,
+                 P=0,
+                 xreg=fourier(msts_load, K=c(2,12)))
+
+NN_1_forecast <- forecast(NN_1, 
+                   h=31,
+                   xreg=fourier(msts_load, K=c(2,12),h=31))
+
+#create dataframe /prep for export 
+NN_1_df <- data.frame(load = NN_1_forecast$mean)
+NN_1_df <- NN_1_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_1_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_1_df, 'Submissions/NN_1.csv')
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#test diff p and P values, also can add xreg with Fourier term for multiple seasonality
+#neural network, p=7 P=0, K=2,12
+#internet suggested p=7 / a higher p would work better. maybe.
+
+NN_2 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg=fourier(msts_load, K=c(2,12)))
+
+NN_2_forecast <- forecast(NN_2, 
+                   h=31,
+                   xreg=fourier(msts_load, K=c(2,12),h=31))
+
+#create dataframe /prep for export 
+NN_2_df <- data.frame(load = NN_2_forecast$mean)
+NN_2_df <- NN_2_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_2_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_2_df, 'Submissions/NN_2.csv')
+```
+
+
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#test diff p and P values, also can add xreg with Fourier term for multiple seasonality
+##neural network, p=7 P=0, K=2,6
+
+NN_3 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg=fourier(msts_load, K=c(2,6)))
+
+NN_3_forecast <- forecast(NN_3, 
+                   h=31,
+                   xreg=fourier(msts_load, K=c(2,6),h=31))
+
+#create dataframe /prep for export 
+NN_3_df <- data.frame(load = NN_3_forecast$mean)
+NN_3_df <- NN_3_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_3_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_3_df, 'Submissions/NN_3.csv')
+```
+
+```{r eval=FALSE, include=FALSE}
+
+#Should add temp and humidity to improve my best model - NN_2!
+#neural network, p=10 P=0, K=2,12 + temp and humidity variables
+temp_df <- read_excel("temperature.xlsx") %>% 
+  mutate(hourly_temp = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  group_by(date) %>%
+  summarise(daily = mean(as.numeric(hourly_temp), na.rm = TRUE)) %>%
+  select(daily) %>%
+  na.omit(temp)
+
+temp <- temp_df$daily #vector
+```
+
+```{r eval=FALSE, include=FALSE}
+humidity_df <- read_excel("relative_humidity.xlsx") %>% 
+  mutate(hourly_humidity = rowMeans(across(3:26), na.rm = TRUE)) %>% 
+  mutate(date = ymd(date)) %>% 
+  group_by(date) %>%
+  summarise(daily = mean(as.numeric(hourly_humidity), na.rm = TRUE)) %>%
+  select(daily) %>%
+  na.omit(humidity)
+
+humidity <- humidity_df$daily #vector
+```
+
+```{r eval=FALSE, include=FALSE}
+autoplot(NN_1_forecast$mean)+
+  autolayer(NN_2_forecast$mean)+
+  autolayer(NN_3_forecast$mean)+
+  autolayer(NN_4_forecast$mean) #forecasting temp and humidity with tbats much better than auto.arima() - similar to the other NN forecasts
+#The forecast for NN_4 including temp and humidity was much worse when using auto.arima() to forecast future values. Performed much better when swapping to TBATS - the auto.arima forecast way below the others as it predicted temp to fall off.
+```
+
+```{r eval=FALSE, include=FALSE}
+cor(msts_load, temp)
+cor(msts_load, humidity)
+cor(temp,humidity)
+```
+
+```{r eval=FALSE, message=FALSE, warning=FALSE, include=FALSE}
+#trying one more NN model - this time only temp since its stronger correlated to load than humidity.
+
+
+#neural network, p=7 P=0, K=2,12 + temp variable
+NN_5 <- nnetar(msts_load,
+                 p=7,
+                 P=0,
+                 xreg= cbind(fourier(msts_load, K=c(2,12)), temp))
+
+temp_July2 <- forecast(tbats(temp), h = 31) #forecasting future 31 from the vector
+
+NN_5_forecast <- forecast(NN_5,
+                   xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
+                               as.numeric(temp_July2$mean)))   
+
+#create dataframe /prep for export 
+NN_5_df <- data.frame(load = NN_5_forecast$mean)
+NN_5_df <- NN_5_df %>% 
+  add_column(date = seq(as.Date("2011-07-01"), by = "day", length.out = nrow(NN_5_df)),.before = 1)
+
+#export as an excel sheet
+write_csv(NN_5_df, 'Submissions/NN_5.csv')
+```
