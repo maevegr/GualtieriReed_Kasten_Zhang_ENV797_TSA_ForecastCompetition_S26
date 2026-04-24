@@ -1,8 +1,8 @@
 ---
 title: "TSA Forecast Competition Final Report"
 subtitle: "https://github.com/maevegr/GualtieriReed_Kasten_Zhang_ENV797_TSA_ForecastCompetition_S26"
-author: "Maeve Gualtieri-Reed, Sadie Kasten, Leo Zhang"
-date: "2026-04-22"
+author: "Maeve Gualtieri-Reed and Sadie Kasten"
+date: "2026-04-24"
 output: pdf_document
 ---
 
@@ -367,6 +367,7 @@ ARIMAF_2_data<- data.frame(
 
 ```
 
+\newpage 
 
 ## Summary of all models
 
@@ -409,7 +410,7 @@ print(all_forecasts)
 
 # Analysis and Conclusions
 
-Using the training set up until June 30th, 2010 and comparing each models forecast for July 2010 to the actual data, the neural network model with terms K = 2,12 was the best fit with the lowest MAPE score. However, after using these models to forecast July 2011 using all data and uploading the forecast to Kaggle, the ARIMA + Fourier with terms K = 2,12 yielded the best MAPE score. This indicates that while training and testing models can help determine which model types work best, testing windows may not always estimate the best forecasting model to use. The data should be more deeply explored to determine if July 2010 was an anomaly year or if it displayed a level shift or other major change that would have significantly helped predict July 2011.
+Using the training set up until June 30th, 2010 and comparing each models forecast for July 2010 to the actual data, the neural network model with terms K = 2,12 was the best fit with the lowest MAPE score. However, after using these models to forecast July 2011 using all data and uploading the forecast to Kaggle, the ARIMA + Fourier with terms K = 2,12 yielded the best MAPE score. This indicates that while training and testing models can help determine which model types work best, testing windows may not always estimate the best forecasting model to use. While the Neural-Network models do the best, none of the models adequately predicted the extremes seen in July 2010. The data should be more deeply explored to determine if July 2010 was an anomaly year or if it displayed a level shift or other major change that would have significantly helped predict July 2011. 
 
 # Unused Models
 Code for models that did not make the top 5 models are not included in this report but can be found in the corresponding .rmd file in GitHub. Model testing code by team member can be found in the Testing folder in GitHub.
