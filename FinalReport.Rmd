@@ -196,7 +196,6 @@ accuracy(NN_train_forecast1$mean, ts_load_test)
 
 ```
 
-
 ```{r, echo=TRUE, message=FALSE, warning=FALSE, fig.cap="Neural Network, Version 1"}
 ## NN K = 2,12 July 2011 forecast
 NN_4 <- nnetar(msts_load,
@@ -207,7 +206,7 @@ NN_4 <- nnetar(msts_load,
 NN_4_forecast <- forecast(NN_4,
                    xreg= cbind(fourier(msts_load, K = c(2,12), h = 31),
                                as.numeric(temp_July$mean),   
-                               as.numeric(humidity_July$mean))) #must get ts forecasts for temp and humidity back into vectors 
+                               as.numeric(humidity_July$mean)))  
 
 plot(NN_4_forecast)
 
@@ -375,7 +374,7 @@ ARIMAF_2_data<- data.frame(
 
 ## Summary of all models
 
-```{r message=FALSE, echo=TRUE, warning=FALSE}
+```{r message=FALSE, echo=FALSE, warning=FALSE}
 
 TBATS_score <- round(accuracy(TBATS_train_forecast$mean, ts_load_test),2)
 NN1_score <- round(accuracy(NN_train_forecast1$mean, ts_load_test),2)
@@ -399,7 +398,7 @@ kbl(summary,
   
 ```
 
-```{r message=FALSE, echo=TRUE, warning=FALSE, fig.cap="All Forecasts"}
+```{r message=FALSE, echo=FALSE, warning=FALSE, fig.cap="All Forecasts"}
 all_forecasts<- autoplot(ts_load_test)+
   autolayer(TBATS_train_forecast, series = "TBATS", PI = FALSE)+
   autolayer(NN_train_forecast1, series = "NN (K = 2,12)", PI = FALSE)+
@@ -416,8 +415,9 @@ print(all_forecasts)
 
 Using the training set up until June 30th, 2010 and comparing each models forecast for July 2010 to the actual data, the neural network model with terms K = 2,12 was the best fit with the lowest MAPE score. However, after using these models to forecast July 2011 using all data and uploading the forecast to Kaggle, the ARIMA + Fourier with terms K = 2,12 yielded the best MAPE score. This indicates that while training and testing models can help determine which model types work best, testing windows may not always estimate the best forecasting model to use. The data should be more deeply explored to determine if July 2010 was an anomaly year or if it displayed a level shift or other major change that would have significantly helped predict July 2011.
 
-# Unused Model Code
+
 ```{r eval=FALSE, include=FALSE}
+#Unused Model Code
 #ARIMA 212
 ARIMA_212 <- auto.arima(ts_load_train, 
                              seasonal=FALSE, 
