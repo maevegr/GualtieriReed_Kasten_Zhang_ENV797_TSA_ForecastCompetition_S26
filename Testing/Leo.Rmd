@@ -1,30 +1,73 @@
 ---
-title: 'Attempt Of Leo'
+title: 'Attempt'
 author: 'Leo Zhang'
 date: '2026-03-31'
 output: pdf_document
 ---
 
 
-## Introduction
+## Preparation
 
 
-```{r, echo = FALSE}
+```{r, message = FALSE, warning = FALSE}
 knitr::opts_chunk$set(tidy = TRUE, tidy.opts = list(width.cutoff = 20))
 library(forecast)
+library(readxl)
 library(tidyverse)
 ```
 
 
 ```{r, message = FALSE, warning = FALSE}
-
+load_original <- read_excel('load.xlsx')
+load_applicable <- load_original |> rowwise() |> mutate(daily = mean(c(h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15, h16, h17, h18, h19, h20, h21, h22, h23, h24), na.rm = TRUE)) |> select(date, daily)
+load_ts_total <- msts(load_applicable$daily, seasonal.periods = c(7, 365.25), start = c(2005, 1))
+load_train <- load_applicable |> filter(date <= ymd('2010-06-30'))
+load_ts_train <- msts(load_train$daily, seasonal.periods = c(7, 365.25), start = c(2005, 1))
+load_test <- load_applicable |> filter(date <= ymd('2010-07-31'), date >= ymd('2010-07-01'))
+load_ts_test <- msts(load_test$daily, seasonal.periods = c(7, 365.25), start = c(2010, 182))
+temperature_applicable <- read.csv('data/temp_processed.csv')
+temperature_train <- temperature_applicable |> filter(date <= ymd('2010-06-30'))
+temperature_test <- temperature_applicable |> filter(date <= ymd('2010-07-31'), date >= ymd('2010-07-01'))
+humidity_applicable <- read.csv('data/humidity_processed.csv')
+humidity_train <- humidity_applicable |> filter(date <= ymd('2010-06-30'))
+humidity_test <- humidity_applicable |> filter(date <= ymd('2010-07-31'), date >= ymd('2010-07-01'))
 ```
 
 
-## First Model
+## Compare Models
 
 
 ```{r, message = FALSE, warning = FALSE}
+first_model <- nnetar(load_ts_train, p = 1, P = 2)
+first_load_trial <- forecast(first_model, h = 31)
+accuracy(first_load_trial, load_ts_test)
+second_model <- nnetar(load_ts_train, p = 2, P = 2)
+second_load_trial <- forecast(second_model, h = 31)
+accuracy(second_load_trial, load_ts_test)
+third_model <- nnetar(load_ts_train, p = 2, P = 1)
+third_load_trial <- forecast(third_model, h = 31)
+accuracy(third_load_trial, load_ts_test)
+fourth_model <- nnetar(load_ts_train, p = 1, P = 1)
+fourth_load_trial <- forecast(fourth_model, h = 31)
+accuracy(fourth_load_trial, load_ts_test)
+```
 
+
+## Introduce forecast
+
+
+```{r, message = FALSE, warning = FALSE}
+# The first and the second models are considered.
+NN_9 <- nnetar(load_ts_total, p = 1, P = 2)
+NN_9_future <- forecast(NN_9, h = 31)
+NN_9_future_load <- c(NN_9_future$mean)
+future_duration <- seq(from = ymd('2011-07-01'), to = ymd('2011-07-31'), by = 'day')
+first_report <- tibble(date = future_duration, load = NN_9_future_load)
+write.csv(first_report, row.names = FALSE, file = 'Submissions/NN_9.csv')
+NN_10 <- nnetar(load_ts_total, p = 2, P = 2)
+NN_10_future <- forecast(NN_10, h = 31)
+NN_10_future_load <- c(NN_10_future$mean)
+second_report <- tibble(date = future_duration, load = NN_10_future_load)
+write.csv(second_report, row.names = FALSE, file = 'Submissions/NN_10.csv')
 ```
 
